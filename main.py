@@ -1,4 +1,5 @@
-import random, math, threading
+import random, math, threading,time,tracemalloc,queue
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from tkinter import Tk, Frame, Canvas, Scrollbar, VERTICAL, Button
 from turtle import TurtleScreen
@@ -14,7 +15,7 @@ window.minsize(width=800, height=800)
 window.config(padx=20, pady=20, bg="gray")
 
 # Create a main canvas that will be scrollable
-main_canvas = Canvas(window, bg="gray", width=800, height=800)
+main_canvas = Canvas(window, bg="gray", width=1000, height=1000)
 main_canvas.pack(fill="both", expand=True, side="left")
 
 # Add a vertical scrollbar and attach it to the main canvas
@@ -26,6 +27,10 @@ main_canvas.config(yscrollcommand=v_scrollbar.set)
 content_frame = Frame(main_canvas, bg="gray")
 main_canvas.create_window((0, 0), window=content_frame, anchor="nw")
 
+# Create a new canvas for the bar plot
+bar_canvas = Canvas(content_frame, width=800, height=800, bg="#94d2bd", highlightthickness=0)
+bar_canvas.grid(column=0, row=2, padx=20, pady=20)
+
 # Configure the main canvas scroll region to update as content is added
 def update_scrollregion(event=None):
     main_canvas.configure(scrollregion=main_canvas.bbox("all"))
@@ -33,7 +38,7 @@ def update_scrollregion(event=None):
 main_canvas.bind("<Configure>", update_scrollregion)
 
 # Frame to hold the turtle canvas
-turtle_canvas = Canvas(content_frame, width=800, height=700, bg="#acbeaa")
+turtle_canvas = Canvas(content_frame, width=800, height=800, bg="#acbeaa")
 turtle_canvas.grid(column=0, row=0, padx=20, pady=20)
 
 # Create a TurtleScreen from the Tkinter canvas and set tracer to 0 for faster drawing
@@ -43,24 +48,76 @@ turtle_screen.tracer(0)  # Disable automatic updates
 
 # Initialize warehouse
 shelves, robots, occupied_positions, marker_positions, shelf_turtles= initialize_warehouse(turtle_screen)
-
-# Assign tasks and control buttons
 robot_x_cord = [-360, -280, -200, -120, -40, 40, 120, 200, 280]
 robot_y_cord = [-200, -100, 0]
+# Assign tasks and control buttons
 assigned_robots = {}
 assigned_tasks = {}
 track_shelf={}
 lock = threading.Lock()
-robot_distances = {robot: 0.0 for robot in robots}  # Dictionary to track total distances
-# Function to calculate distance
+# Tracking data for robots
+robot_distances = {robot: 0.0 for robot in robots}
+robot_times = {robot: 0.0 for robot in robots}
+robot_memories = {robot: 0.0 for robot in robots}
+# Thread-safe queue for updating the bar plot
+plot_update_queue = queue.Queue()
 def calculate_distance(pos1, pos2):
+    """Calculate Euclidean distance between two positions."""
     return math.sqrt((pos2[0] - pos1[0]) ** 2 + (pos2[1] - pos1[1]) ** 2)
+def update_bar_plot_main():
+    """Update the bar plot on the main thread."""
+    try:
+        # Process data from the queue
+        while not plot_update_queue.empty():
+            robot_labels, distances, times, memories = plot_update_queue.get()
+
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(12, 5))
+            width = 0.25  # Width of the bars
+
+            # Plot data
+            x = range(len(robot_labels))
+            ax.bar([i - width for i in x], distances, width, label="Distance (units)")
+            ax.bar(x, times, width, label="Time (s)")
+            ax.bar([i + width for i in x], memories, width, label="Memory (MB)")
+
+            # Add labels and legend
+            ax.set_title("Robot Performance Metrics")
+            ax.set_xticks(x)
+            ax.set_xticklabels(robot_labels)
+            ax.set_xlabel("Robots")
+            ax.legend()
+
+            # Clear previous plots from the canvas
+            for widget in bar_canvas.winfo_children():
+                widget.destroy()
+
+            # Embed the plot into the Tkinter canvas
+            canvas = FigureCanvasTkAgg(fig, master=bar_canvas)
+            canvas_widget = canvas.get_tk_widget()
+            canvas_widget.pack()
+            canvas.draw()
+    except Exception as e:
+        print(f"Error updating plot: {e}")
+
+def schedule_bar_plot_update():
+    """Schedule the bar plot update on the main thread."""
+    robot_labels = [f"Robot {i}" for i in range(len(robot_distances))]
+    distances = list(robot_distances.values())
+    times = list(robot_times.values())
+    memories = [mem * 300 / (1024*1024) for mem in robot_memories.values()]  # Convert memory to MB
+
+    # Put data in the queue and schedule the update
+    plot_update_queue.put((robot_labels, distances, times, memories))
+    window.after(100, update_bar_plot_main)
+
 # Robot action functions
 def pick_shelf(robot_index, target_position):
     """Generic function to pick a shelf and move to a target."""
     robot = robots[robot_index]
     shelf_name = f"shelf{random.randint(0, len(shelves) - 2)}"
-
+    start_time =  time.time()
+    tracemalloc.start()
     # Assign the task
     with lock:
         assigned_robots[robot] = shelf_name
@@ -88,11 +145,18 @@ def pick_shelf(robot_index, target_position):
     path = bfs(start_marker_target, goal_marker_target, marker_positions)
     move_robot(robot, path, occupied_positions, (goal_marker_target[0],target_position[1]), marker_positions)
     robot_distances[robot]=calculate_distance(start_marker_shelf,goal_marker_shelf) + calculate_distance(start_marker_target,goal_marker_target)
+    # Update time and memory
+    robot_times[robot] += abs(time.time() - start_time)
+    current_memory, _ = tracemalloc.get_traced_memory()
+    robot_memories[robot] += current_memory
+    tracemalloc.stop()
     # Release the robot
     print(f"{shelf_name} moved to {target_position}. Total distance traveled by Robot {robot_index}: {robot_distances[robot]:.2f}")
     with lock:
         release_robot(robot, assigned_robots, assigned_tasks)
-
+        # Update the bar plot after task completion
+        # Schedule the bar plot update
+    schedule_bar_plot_update()
 def finish_shelf(robot_index, target_position):
     """Generic function to return a shelf to its original position."""
     robot = robots[robot_index]
@@ -151,11 +215,11 @@ def finish_pick_2():
 
 def finish_stow_1():
     """Start a thread for Stow 1 task."""
-    threading.Thread(target=finish_shelf, args=(2, ((random.randint(-300, 200)), (random.randint(-200, 60))))).start()
+    threading.Thread(target=finish_shelf, args=(2,  ((random.choice(robot_x_cord)+40),(random.choice(robot_y_cord)+50)))).start()
 
 def finish_stow_2():
     """Start a thread for Stow 2 task."""
-    threading.Thread(target=finish_shelf, args=(3, ((random.randint(-300,200)), (random.randint(-200,60))))).start()
+    threading.Thread(target=finish_shelf, args=(3,  ((random.choice(robot_x_cord)+40),(random.choice(robot_y_cord)+50)))).start()
 
 # Create a separate canvas for text elements and buttons below the turtle canvas
 text_canvas = Canvas(content_frame, width=800, height=300, bg="#94d2bd", highlightthickness=0)
@@ -191,7 +255,9 @@ text_canvas.create_window(50, 230, window=finish_pick_1)
 text_canvas.create_window(150, 230, window=finish_pick_2)
 text_canvas.create_window(610, 230, window=finish_stow_1)
 text_canvas.create_window(740, 230, window=finish_stow_2)
-# Update the turtle screen manually after drawing all elements
+
+# Initialize the first bar plot
+schedule_bar_plot_update()
 turtle_screen.update()
 
 # Main loop to run the Tkinter window

@@ -1,7 +1,6 @@
 # Initial States
 import random
 from turtle import RawTurtle
-
 robot_x_cord = [-360, -280, -200, -120, -40, 40, 120, 200, 280]
 robot_y_cord = [-200, -100, 0]
 def initialize_warehouse(turtle_screen):
