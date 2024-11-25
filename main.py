@@ -115,7 +115,10 @@ def schedule_bar_plot_update():
 def pick_shelf(robot_index, target_position):
     """Generic function to pick a shelf and move to a target."""
     robot = robots[robot_index]
-    shelf_name = f"shelf{random.randint(0, len(shelves) - 2)}"
+    while True:
+        shelf_name = f"shelf{random.randint(0, len(shelves) - 2)}"
+        if shelf_name not in track_shelf.keys():
+            break
     start_time =  time.time()
     tracemalloc.start()
     # Assign the task

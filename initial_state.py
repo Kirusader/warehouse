@@ -33,12 +33,15 @@ def create_shelves(turtle_screen, shelves, shelf_turtles):
 def create_robots(turtle_screen, robots, occupied_positions):
     """Create robots at random positions."""
     for _ in range(4):
+        while True:
+            position = ((random.choice(robot_x_cord) + 40), (random.choice(robot_y_cord) + 50))
+            if position not in occupied_positions:
+                break
         robot = RawTurtle(turtle_screen, shape="square")
         robot.speed(1)
         robot.color("blue")
         robot.penup()
         robot.shapesize(stretch_len=1.5, stretch_wid=1.5)
-        position = ((random.choice(robot_x_cord)+40),(random.choice(robot_y_cord)+50))
         robot.goto(position)
         robots.append(robot)
         occupied_positions.add(position)
