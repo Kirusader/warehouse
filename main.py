@@ -6,8 +6,7 @@ from turtle import TurtleScreen
 from initial_state import initialize_warehouse
 from model import release_robot
 from policy import bring_shelf_to_target
-from transition import bfs, move_robot
-
+from transition import move_robot_with_q_learning,q_learning_path,initialize_q_table,get_neighbors
 # Create the main Tkinter window
 window = Tk()
 window.title("Warehouse Automation")
@@ -46,8 +45,12 @@ turtle_screen = TurtleScreen(turtle_canvas)
 turtle_screen.bgcolor("#acbeaa")
 turtle_screen.tracer(0)  # Disable automatic updates
 
+
+
 # Initialize warehouse
-shelves, robots, occupied_positions, marker_positions, shelf_turtles= initialize_warehouse(turtle_screen)
+Q_TABLE = {}
+shelves, robots, occupied_positions, marker_positions, shelf_turtles = initialize_warehouse(turtle_screen)
+initialize_q_table(marker_positions)  # Initialize Q-table
 robot_x_cord = [-360, -280, -200, -120, -40, 40, 120, 200, 280]
 robot_y_cord = [-200, -100, 0]
 # Assign tasks and control buttons
@@ -55,6 +58,7 @@ assigned_robots = {}
 assigned_tasks = {}
 track_shelf={}
 lock = threading.Lock()
+
 # Tracking data for robots
 robot_distances = {robot: 0.0 for robot in robots}
 robot_times = {robot: 0.0 for robot in robots}
@@ -131,8 +135,10 @@ def pick_shelf(robot_index, target_position):
     robot_position = (round(robot.position()[0]), round(robot.position()[1]))
     start_marker_shelf = min(marker_positions, key=lambda pos: math.hypot(pos[0] - robot_position[0], pos[1] - robot_position[1]))
     goal_marker_shelf = min(marker_positions, key=lambda pos: math.hypot(pos[0] - shelf_position[0], pos[1] - shelf_position[1]))
-    path = bfs(start_marker_shelf, goal_marker_shelf, marker_positions)
-    move_robot(robot, path, occupied_positions, (goal_marker_shelf[0],shelf_position[1]), marker_positions)
+    possible_path_shelf = len(get_neighbors(start_marker_shelf, marker_positions))
+    path = q_learning_path(start_marker_shelf, goal_marker_shelf, marker_positions, verbose=False)
+
+    move_robot_with_q_learning(robot, path, occupied_positions, (goal_marker_shelf[0],shelf_position[1]), marker_positions)
     # Handle shelf visibility and tracking
     with lock:
         for shelf_turtle in shelf_turtles:
@@ -145,8 +151,10 @@ def pick_shelf(robot_index, target_position):
     # Calculate path to target
     start_marker_target = min(marker_positions, key=lambda pos: math.hypot(pos[0] - shelf_position[0], pos[1] - shelf_position[1]))
     goal_marker_target = min(marker_positions, key=lambda pos: math.hypot(pos[0] - target_position[0], pos[1] - target_position[1]))
-    path = bfs(start_marker_target, goal_marker_target, marker_positions)
-    move_robot(robot, path, occupied_positions, (goal_marker_target[0],target_position[1]), marker_positions)
+    possible_path_target = len(get_neighbors(start_marker_target, marker_positions))
+    path = q_learning_path(start_marker_target, goal_marker_target, marker_positions,verbose=False)
+
+    move_robot_with_q_learning(robot, path, occupied_positions, (goal_marker_target[0],target_position[1]), marker_positions)
     robot_distances[robot]=calculate_distance(start_marker_shelf,goal_marker_shelf) + calculate_distance(start_marker_target,goal_marker_target)
     # Update time and memory
     robot_times[robot] += abs(time.time() - start_time)
@@ -154,7 +162,7 @@ def pick_shelf(robot_index, target_position):
     robot_memories[robot] += current_memory
     tracemalloc.stop()
     # Release the robot
-    print(f"{shelf_name} moved to {target_position}. Total distance traveled by Robot {robot_index}: {robot_distances[robot]:.2f}")
+    print(f"{shelf_name} moved to {target_position}. Total distance traveled by Robot {robot_index}: {robot_distances[robot]:.2f} and chose 2 best paths out of {possible_path_shelf + possible_path_target} possible paths.")
     with lock:
         release_robot(robot, assigned_robots, assigned_tasks)
         # Update the bar plot after task completion
@@ -174,8 +182,8 @@ def finish_shelf(robot_index, target_position):
     robot_position = (round(robot.position()[0]), round(robot.position()[1]))
     start_marker_shelf = min(marker_positions, key=lambda pos: math.hypot(pos[0] - robot_position[0], pos[1] - robot_position[1]))
     goal_marker_shelf = min(marker_positions, key=lambda pos: math.hypot(pos[0] - shelf_position[0], pos[1] - shelf_position[1]))
-    path = bfs(start_marker_shelf, goal_marker_shelf, marker_positions)
-    move_robot(robot, path, occupied_positions, (goal_marker_shelf[0],shelf_position[1]), marker_positions)
+    path = q_learning_path(start_marker_shelf, goal_marker_shelf, marker_positions,verbose=False)
+    move_robot_with_q_learning(robot, path, occupied_positions, (goal_marker_shelf[0],shelf_position[1]), marker_positions)
 
     # Handle shelf visibility
     with lock:
@@ -187,8 +195,8 @@ def finish_shelf(robot_index, target_position):
     robot_position = (round(robot.position()[0]), round(robot.position()[1]))
     start_marker = min(marker_positions, key=lambda pos: math.hypot(pos[0] - robot_position[0], pos[1] - robot_position[1]))
     goal_marker = min(marker_positions, key=lambda pos: math.hypot(pos[0] - target_position[0], pos[1] - target_position[1]))
-    path = bfs(start_marker, goal_marker, marker_positions)
-    move_robot(robot, path, occupied_positions, target_position, marker_positions)
+    path = q_learning_path(start_marker, goal_marker, marker_positions,verbose=False)
+    move_robot_with_q_learning(robot, path, occupied_positions, target_position, marker_positions)
     # Release the robot
     print(f"{shelf_name} returned to its original position.")
     with lock:
