@@ -1,6 +1,7 @@
 # Initial States
 import random
 from turtle import RawTurtle
+from exogeneous_info import generate_random_position
 robot_x_cord = [-360, -280, -200, -120, -40, 40, 120, 200, 280]
 robot_y_cord = [-200, -100, 0]
 def initialize_warehouse(turtle_screen):
@@ -34,7 +35,8 @@ def create_robots(turtle_screen, robots, occupied_positions):
     """Create robots at random positions."""
     for _ in range(4):
         while True:
-            position = ((random.choice(robot_x_cord) + 40), (random.choice(robot_y_cord) + 50))
+            random_position=generate_random_position(robot_x_cord,robot_y_cord)
+            position = ((random_position[0]+ 40), (random_position[1] + 50))
             if position not in occupied_positions:
                 break
         robot = RawTurtle(turtle_screen, shape="square")

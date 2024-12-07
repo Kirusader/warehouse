@@ -7,6 +7,7 @@ from initial_state import initialize_warehouse
 from model import release_robot
 from policy import bring_shelf_to_target
 from transition import move_robot_with_q_learning,q_learning_path,initialize_q_table,get_neighbors
+from objective import evaluate_efficiency, evaluate_task_completion
 # Create the main Tkinter window
 window = Tk()
 window.title("Warehouse Automation")
@@ -44,9 +45,6 @@ turtle_canvas.grid(column=0, row=0, padx=20, pady=20)
 turtle_screen = TurtleScreen(turtle_canvas)
 turtle_screen.bgcolor("#acbeaa")
 turtle_screen.tracer(0)  # Disable automatic updates
-
-
-
 # Initialize warehouse
 Q_TABLE = {}
 shelves, robots, occupied_positions, marker_positions, shelf_turtles = initialize_warehouse(turtle_screen)
@@ -57,6 +55,8 @@ robot_y_cord = [-200, -100, 0]
 assigned_robots = {}
 assigned_tasks = {}
 track_shelf={}
+# Initialize completed tasks
+completed_tasks = []
 lock = threading.Lock()
 
 # Tracking data for robots
@@ -75,23 +75,45 @@ def update_bar_plot_main():
         while not plot_update_queue.empty():
             robot_labels, distances, times, memories = plot_update_queue.get()
 
-            # Create the plot
-            fig, ax = plt.subplots(figsize=(12, 5))
+            # Validate data for NaN or invalid values
+            distances = [d if not math.isnan(d) else 0 for d in distances]
+            times = [t if not math.isnan(t) else 0 for t in times]
+            memories = [m if not math.isnan(m) else 0 for m in memories]
+
+            # Check if data is empty
+            if not robot_labels or not distances or not times or not memories:
+                print("Warning: One or more data arrays are empty. Skipping plot update.")
+                return
+
+            # Create subplots
+            fig, ax = plt.subplots(3, 1, figsize=(12, 15))  # Adjusted figsize for better layout
             width = 0.25  # Width of the bars
 
-            # Plot data
+            # Plot 1: Bar chart for distance traveled
             x = range(len(robot_labels))
-            ax.bar([i - width for i in x], distances, width, label="Distance (units)")
-            ax.bar(x, times, width, label="Time (s)")
-            ax.bar([i + width for i in x], memories, width, label="Memory (MB)")
+            ax[0].set_title("Distance Traveled by Robots")
+            ax[0].bar([i - width for i in x], distances, width, label="Distance (units)", color='blue')
+            ax[0].set_xticks(x)
+            ax[0].set_xticklabels(robot_labels)
+            ax[0].set_xlabel("Robots")
+            ax[0].set_ylabel("Distance (units)")
+            ax[0].legend()
 
-            # Add labels and legend
-            ax.set_title("Robot Performance Metrics")
-            ax.set_xticks(x)
-            ax.set_xticklabels(robot_labels)
-            ax.set_xlabel("Robots")
-            ax.legend()
-
+            # Plot 2: Bar plot for time required
+            ax[1].set_title("Time Required for Robots to Complete Task")
+            ax[1].bar([i - width for i in x], times, width, label="Time (s)", color='green')
+            ax[1].set_xticks(x)
+            ax[1].set_xticklabels(robot_labels)
+            ax[1].set_xlabel("Robots")
+            ax[1].set_ylabel("Frequency")
+            ax[1].legend()
+            # Plot 3: Pie chart for memory usage
+            total_memory = sum(memories)
+            if total_memory > 0:  # Check if total memory is non-zero
+                ax[2].pie(memories, labels=robot_labels, autopct='%1.1f%%', startangle=90, colors=['red', 'yellow', 'cyan',"pink"])
+            else:
+                ax[2].text(0.5, 0.5, 'No Data', horizontalalignment='center', verticalalignment='center', transform=ax[2].transAxes)
+            ax[2].set_title("Memory Usage by Robots")
             # Clear previous plots from the canvas
             for widget in bar_canvas.winfo_children():
                 widget.destroy()
@@ -101,6 +123,7 @@ def update_bar_plot_main():
             canvas_widget = canvas.get_tk_widget()
             canvas_widget.pack()
             canvas.draw()
+
     except Exception as e:
         print(f"Error updating plot: {e}")
 
@@ -114,7 +137,23 @@ def schedule_bar_plot_update():
     # Put data in the queue and schedule the update
     plot_update_queue.put((robot_labels, distances, times, memories))
     window.after(100, update_bar_plot_main)
+def display_metrics():
+    """Calculate and display efficiency and task completion metrics."""
+    tasks_completed = len(completed_tasks)
+    distances=[]
+    for distance in robot_distances.values():
+       distances.append(distance)
+    total_distance=sum(distances)
+    # Evaluate efficiency
+    efficiency = evaluate_efficiency(tasks_completed, (total_distance/1000))
+    task_completion_efficiency = evaluate_task_completion(assigned_tasks, completed_tasks)
+    print(f"Efficiency relative to distances: {efficiency:.2f}")
+    print(f"Task Completion Efficiency: {task_completion_efficiency * 100:.2f}")
 
+def schedule_metrics_display():
+    """Schedule the metrics display."""
+    display_metrics()
+    window.after(5000, schedule_metrics_display)  # Refresh every 5 seconds
 # Robot action functions
 def pick_shelf(robot_index, target_position):
     """Generic function to pick a shelf and move to a target."""
@@ -167,6 +206,8 @@ def pick_shelf(robot_index, target_position):
         release_robot(robot, assigned_robots, assigned_tasks)
         # Update the bar plot after task completion
         # Schedule the bar plot update
+    completed_tasks.append((robot, shelf_name, target_position))
+
     schedule_bar_plot_update()
 def finish_shelf(robot_index, target_position):
     """Generic function to return a shelf to its original position."""
@@ -201,7 +242,6 @@ def finish_shelf(robot_index, target_position):
     print(f"{shelf_name} returned to its original position.")
     with lock:
         release_robot(robot, assigned_robots, assigned_tasks)
-
 # Button actions
 def pick_shelf_1():
     threading.Thread(target=pick_shelf, args=(0, (-300, -260))).start()
@@ -268,6 +308,7 @@ text_canvas.create_window(610, 230, window=finish_stow_1)
 text_canvas.create_window(740, 230, window=finish_stow_2)
 
 # Initialize the first bar plot
+schedule_metrics_display()
 schedule_bar_plot_update()
 turtle_screen.update()
 

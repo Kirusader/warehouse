@@ -21,5 +21,4 @@ def release_robot(robot, assigned_robots, assigned_tasks):
     """Release a robot after completing its task."""
     if robot in assigned_robots:
         del assigned_robots[robot]
-    if robot in assigned_tasks:
-        del assigned_tasks[robot]
+
