@@ -51,7 +51,7 @@ shelves, robots, occupied_positions, marker_positions, shelf_turtles = initializ
 initialize_q_table(marker_positions)  # Initialize Q-table
 robot_x_cord = [-360, -280, -200, -120, -40, 40, 120, 200, 280]
 robot_y_cord = [-200, -100, 0]
-# Assign tasks and control buttons
+# Assign tasks and robots are tracked using dictionary
 assigned_robots = {}
 assigned_tasks = {}
 track_shelf={}
@@ -207,7 +207,6 @@ def pick_shelf(robot_index, target_position):
         # Update the bar plot after task completion
         # Schedule the bar plot update
     completed_tasks.append((robot, shelf_name, target_position))
-
     schedule_bar_plot_update()
 def finish_shelf(robot_index, target_position):
     """Generic function to return a shelf to its original position."""

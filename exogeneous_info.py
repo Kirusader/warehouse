@@ -2,5 +2,5 @@
 import random
 
 def generate_random_position(x_range, y_range):
-    """Generate a random position within specified ranges."""
+    """Choose a random position from the provided list."""
     return random.choice(x_range), random.choice(y_range)

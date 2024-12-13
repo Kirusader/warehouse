@@ -7,8 +7,8 @@ import time
 ALPHA = 0.1  # Learning rate
 GAMMA = 0.95  # Discount factor
 EPSILON = 1.0  # Exploration rate
-EPSILON_DECAY = 0.99
-MIN_EPSILON = 0.01
+EPSILON_DECAY = 0.99 #epsilon decay
+MIN_EPSILON = 0.01 #Minimu epsilon
 Q_TABLE = {}
 lock = threading.Lock()  # Thread safety for Q-table access
 
@@ -22,7 +22,7 @@ def get_neighbors(node, markers):
 def initialize_q_table(markers):
     """Initialize Q-table for all markers."""
     global Q_TABLE
-    with lock:  # Protect Q-table initialization
+    with lock:  # Protect Q-table initialisation
         Q_TABLE = {}
         for marker in markers:
             neighbors = get_neighbors(marker, markers)
