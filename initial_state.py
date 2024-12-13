@@ -1,5 +1,4 @@
 # Initial States
-import random
 from turtle import RawTurtle
 from exogeneous_info import generate_random_position
 robot_x_cord = [-360, -280, -200, -120, -40, 40, 120, 200, 280]
