@@ -18,16 +18,15 @@ To run this project, ensure the following software and libraries are installed:
    - Download: [Python Official Site](https://www.python.org/downloads/)
 
 ### 2. **Python Packages**
-Install the required libraries using the command:
-    ```bash
-    pip install matplotlib tkinter
-
+#### Install the required libraries.
 
 ---
+
 ## How to Run
 ### 1. **Clone or download the project file**
 ### 2. **Open a terminal in the project directory.**
 ### 3. **Run the main script:**
    ```bash  
+   pip install matplotlib tkinter
    python main.py
 
